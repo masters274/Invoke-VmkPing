@@ -1,5 +1,5 @@
 ﻿#requires -Version 1.0
-#requires -Module VMware.VMware.PowerCli
+#requires -Module VMware.PowerCLI
 
 <#PSScriptInfo
 
@@ -21,7 +21,7 @@
 
         .ICONURI 
 
-        .EXTERNALMODULEDEPENDENCIES VMware.PowerCli
+        .EXTERNALMODULEDEPENDENCIES VMware.PowerCLI
 
         .REQUIREDSCRIPTS 
 
