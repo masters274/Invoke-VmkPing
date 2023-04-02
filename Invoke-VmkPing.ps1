@@ -1,4 +1,4 @@
-﻿#requires -Version 1.0
+#requires -Version 1.0
 #requires -Module VMware.PowerCLI
 
 <#PSScriptInfo
@@ -108,17 +108,24 @@ Param
     [System.Management.Automation.Credential()]
     [PSCredential] $Credential,
         
+    [Parameter()]
     [int] $Count = 3,
         
+    [Parameter()]
     [Switch] $DFBit, # set this when testing jumbo frames, or > 1500 packet size
         
     [Parameter(Mandatory = $true, HelpMessage = 'IP you want to ping for testing', ValueFromPipeline)]
     [IPAddress[]] $IPAddress,
         
+    [Parameter()]
     [ValidatePattern('^vmk*')]
     [String] $Interface = $null, # $null will pick the nic based on routing table, or interface subnet
         
+    [Parameter()]
     [int] $Size = 1500, # set to 8972 to test jumbo frames
+
+    [Parameter()]
+    [string] $NetStack, # Options are 'defaultTcpipStack', 'vSphereProvisioning', 'vmotion'
         
     [Long] $TTL = $null
 )
@@ -137,7 +144,7 @@ Begin {
             $Server = $VMHost
         }
         Connect-VIServer -Server $Server -Credential $Credential -WarningAction SilentlyContinue -ErrorAction $strStopAction | Out-Null
-        $cmdESXcli = Get-EsxCli -VMHost $VMHost -ErrorAction $strStopAction
+        $cmdESXcli = Get-EsxCli -VMHost $VMHost -V2 -ErrorAction $strStopAction
     }
     Catch {
         Write-Error -Message ('Failed to connect to VMHost {0}' -f $VMHost)
@@ -159,22 +166,23 @@ Process {
         Else {
             $isIPv4 = $true
         }
-    
-        $ret = $cmdESXcli.network.diag.ping(
-            $Count,
-            $false, # debugging
-            $(If (!$DFBit) { $null } Else { $DFBit }), # Don't fragment bit
-            $ip,
-            $null,
-            $null, # String Interval
-            $isIPv4,
-            $isIPv6,
-            $null, # [string] netstack
-            $null, # [string] nexthop
-            $Size, # Set to 8972 to test jumbo frames, also need DF bit set
-            $(If (!$TTL) { $null } Else { $TTL }),
-            $null # [String] wait
-        )
+        #Create Args Object, so ESXCLI can be called name name rather than position.
+        $cmdESXcliArgs = $cmdESXCLI.network.diag.ping.CreateArgs()
+        
+        #End of line comments are from that object
+        #By default all args are "unset" using if (!$Variable) {} Statements to keep them that way, because passing $Null from Params doesn't work
+        $cmdESXCLIArgs.host = $IP        #([string], optional)
+        If (!$DFBit) {  } Else { $cmdESXCLIArgs.df = $DFBit } #([boolean], optional)
+        If (!$TTL) {  } Else { $cmdESXCLIArgs.ttl =  $TTL}   #([long], optional)
+        $cmdESXCLIArgs.debug = $false       #([boolean], optional)
+        $cmdESXCLIArgs.count = $Count       #([long], optional)
+        $cmdESXCLIArgs.netstack = $netstack   #([string], optional)
+        If (!$size) {} else {$cmdESXCLIArgs.size = $Size}         #([long], optional)
+        If ($isIPv4 -eq $false) {} Else {$cmdESXCLIArgs.ipv4 = $isIPv4}        #([boolean], optional)
+        if ($isIPv6 -eq $false) {} Else {$cmdESXCLIArgs.ipv6 = $isIPv6}        #([boolean], optional)
+        If (!$interface) {} else {$cmdESXCLIArgs.interface = $Interface}   #([string], optional)
+
+        $ret = $cmdESXcli.network.diag.ping.Invoke($cmdESXcliArgs)
         
         If ($ret.summary.PacketLost -gt 0) {
             Write-Warning -Message ('IP {0} not reachable, or missing packets!' -f $ip)
