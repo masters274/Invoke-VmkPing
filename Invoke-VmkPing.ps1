@@ -3,7 +3,7 @@
 
 <#PSScriptInfo
 
-        .VERSION 0.4.1
+        .VERSION 0.4.2
 
         .GUID 58a4280b-fcf2-43bc-9dc9-b1da178da404
 
@@ -52,7 +52,7 @@
         enable SSH to perform these tests. This script works great in an automated deployment strategy. 
 
         .EXAMPLE
-        Invoke-VmkPing -VMHost myHost.domain.local -Credential root -IPAddress 192.168.200.10
+        Invoke-VmkPing -VMHost myHost.domain.local -Credential root -IPAddress 192.168.200.10 -Interface vmk2
         This will perform a VMK ping to 192.168.200.10 from host myHost.domain.local, results will look similar to
         the following.
 
@@ -98,15 +98,8 @@
 
 Param
 (
-    [Parameter(Mandatory = $true, HelpMessage = 'VMHost you want to ping from')]
-    [String] $VMHost, 
-
-    [Parameter(Mandatory = $false, HelpMessage = 'Connect to vCenter instead of direct to host')]
-    [String] $VCenterServer, 
-        
-    [Parameter(Mandatory = $true, HelpMessage = 'Credentials for administering VMHost')]
-    [System.Management.Automation.Credential()]
-    [PSCredential] $Credential,
+    [Parameter(Mandatory = $true, HelpMessage = 'Server/VMHost you want to ping from')]
+    [String] $Server, 
         
     [Parameter()]
     [int] $Count = 3,
@@ -137,13 +130,8 @@ Begin {
     
     # Connect to the VMHost
     Try {
-        if ($VCenterServer) {
-            $Server = $VCenterServer
-        }
-        else { 
-            $Server = $VMHost
-        }
-        Connect-VIServer -Server $Server -Credential $Credential -WarningAction SilentlyContinue -ErrorAction $strStopAction | Out-Null
+        
+        $VMHost = Get-VMHost -Name $Server -ErrorAction $strStopAction
         $cmdESXcli = Get-EsxCli -VMHost $VMHost -V2 -ErrorAction $strStopAction
     }
     Catch {
@@ -160,10 +148,10 @@ Process {
      
     foreach ($ip in $IPAddress) {
         
-        If ($ip.AddressFamily -eq 'InterNetworkV6') {
+        if ($ip.AddressFamily -eq 'InterNetworkV6') {
             $isIPv6 = $true
         }
-        Else {
+        else {
             $isIPv4 = $true
         }
         #Create Args Object, so ESXCLI can be called name name rather than position.
@@ -171,27 +159,24 @@ Process {
         
         #End of line comments are from that object
         #By default all args are "unset" using if (!$Variable) {} Statements to keep them that way, because passing $Null from Params doesn't work
-        $cmdESXCLIArgs.host = $IP        #([string], optional)
-        If (!$DFBit) {  } Else { $cmdESXCLIArgs.df = $DFBit } #([boolean], optional)
-        If (!$TTL) {  } Else { $cmdESXCLIArgs.ttl =  $TTL}   #([long], optional)
+        $cmdESXCLIArgs.host = $IP.ToString()        #([string], optional)
         $cmdESXCLIArgs.debug = $false       #([boolean], optional)
-        $cmdESXCLIArgs.count = $Count       #([long], optional)
-        $cmdESXCLIArgs.netstack = $netstack   #([string], optional)
-        If (!$size) {} else {$cmdESXCLIArgs.size = $Size}         #([long], optional)
-        If ($isIPv4 -eq $false) {} Else {$cmdESXCLIArgs.ipv4 = $isIPv4}        #([boolean], optional)
-        if ($isIPv6 -eq $false) {} Else {$cmdESXCLIArgs.ipv6 = $isIPv6}        #([boolean], optional)
-        If (!$interface) {} else {$cmdESXCLIArgs.interface = $Interface}   #([string], optional)
+        if ($DFBit) { $cmdESXCLIArgs.df = $DFBit } #([boolean], optional)
+        if ($TTL) { $cmdESXCLIArgs.ttl = $TTL }   #([long], optional)
+        if ($Count) { $cmdESXCLIArgs.count = $Count }       #([long], optional)
+        if ($NetStack) { $cmdESXCLIArgs.netstack = $NetStack }  #([string], optional)        
+        if ($Size) { $cmdESXCLIArgs.size = $Size }         #([long], optional)
+        if ($interface) { $cmdESXCLIArgs.interface = $Interface }   #([string], optional)
+        if ($isIPv4 -eq $false) {} else { $cmdESXCLIArgs.ipv4 = $isIPv4 }        #([boolean], optional)
+        if ($isIPv6 -eq $false) {} else { $cmdESXCLIArgs.ipv6 = $isIPv6 }        #([boolean], optional)
 
         $ret = $cmdESXcli.network.diag.ping.Invoke($cmdESXcliArgs)
         
-        If ($ret.summary.PacketLost -gt 0) {
+        if ($ret.summary.PacketLost -gt 0) {
             Write-Warning -Message ('IP {0} not reachable, or missing packets!' -f $ip)
         }
     
         $ret.summary
     }
 }
-    
-End {
-    Disconnect-VIServer -Server $Server -Force -Confirm:$false | Out-Null
-}
+
