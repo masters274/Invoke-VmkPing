@@ -3,7 +3,7 @@
 
 <#PSScriptInfo
 
-        .VERSION 0.4.2
+        .VERSION 0.4.3
 
         .GUID 58a4280b-fcf2-43bc-9dc9-b1da178da404
 
@@ -99,6 +99,7 @@
 Param
 (
     [Parameter(Mandatory = $true, HelpMessage = 'Server/VMHost you want to ping from')]
+    [Alias('VMHost')]
     [String] $Server, 
         
     [Parameter()]
